@@ -1,0 +1,198 @@
+﻿@model TaxManagementSystem.Models.DashboardViewModel
+
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<h2>Dashboard</h2>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Total Income</h5>
+                <p class="card-text">@Model.TotalIncome.ToString("C")</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Total Expenses</h5>
+                <p class="card-text">@Model.TotalExpenses.ToString("C")</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Estimated Tax</h5>
+                <p class="card-text">@Model.EstimatedTax.ToString("C")</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr />
+
+<div class="row">
+    <div class="col-md-8">
+        <h3>Income vs. Expenses</h3>
+        <div style="height: 400px;">
+            <canvas id="incomeExpenseChart"></canvas>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <h3>Tax Calculation</h3>
+        <form method="post" asp-action="Index">
+            <div class="form-group form-check">
+                <input type="checkbox" class="form-check-input" name="applyZelfstandigenaftrek" value="true" @(Model.TaxCalculation.ApplyZelfstandigenaftrek ? "checked" : "") />
+                <label class="form-check-label" for="applyZelfstandigenaftrek">Apply Zelfstandigenaftrek?</label>
+            </div>
+            <div class="form-group form-check">
+                <input type="checkbox" class="form-check-input" name="applyStartersaftrek" value="true" @(Model.TaxCalculation.ApplyStartersaftrek ? "checked" : "") />
+                <label class="form-check-label" for="applyStartersaftrek">Apply Startersaftrek?</label>
+            </div>
+            <button type="submit" class="btn btn-primary">Recalculate Tax</button>
+        </form>
+
+
+        <hr />
+
+        <h4>Tax Calculation Result</h4>
+        <p><strong>Gross Profit:</strong> @Model.TaxCalculation.GrossProfit.ToString("C")</p>
+        <p><strong>Deducted Total Expenses:</strong> @Model.TotalExpenses.ToString("C")</p>
+        <p><strong>Taxable Income:</strong> @Model.TaxCalculation.TaxableIncome.ToString("C")</p>
+        <p><strong>Income Tax:</strong> @Model.TaxCalculation.IncomeTax.ToString("C")</p>
+        <p><strong>General Tax Credit:</strong> @Model.TaxCalculation.GeneralTaxCredit.ToString("C")</p>
+        <p><strong>Labor Tax Credit:</strong> @Model.TaxCalculation.LaborTaxCredit.ToString("C")</p>
+        <p><strong>Healthcare Contribution:</strong> @Model.TaxCalculation.HealthcareContribution.ToString("C")</p>
+        <p><strong>Final Tax Amount:</strong> @Model.TaxCalculation.FinalTaxAmount.ToString("C")</p>
+    </div>
+</div>
+
+<hr />
+
+<h3>Recent Transactions</h3>
+<div class="row">
+    <div class="col-md-6">
+        <h4>Recent Incomes</h4>
+        <ul class="list-group">
+            @foreach (var income in Model.RecentIncomes)
+            {
+                <li class="list-group-item text-success">
+                    @income.Date.ToString("yyyy-MM-dd"): @income.Source - @income.Amount.ToString("C")
+                </li>
+            }
+        </ul>
+    </div>
+    <div class="col-md-6">
+        <h4>Recent Expenses</h4>
+        <ul class="list-group">
+            @foreach (var expense in Model.RecentExpenses)
+            {
+                <li class="list-group-item text-danger">
+                    @expense.Date.ToString("yyyy-MM-dd"): @expense.Category - @expense.Amount.ToString("C")
+                </li>
+            }
+        </ul>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    var ctx = document.getElementById('incomeExpenseChart').getContext('2d');
+
+    // Dates and amounts from the model
+    var incomeDates = @Html.Raw(Json.Serialize(Model.Incomes?.Select(i => i.Date.ToString("yyyy-MM-dd")).ToList() ?? new List<string>()));
+    var incomeAmounts = @Html.Raw(Json.Serialize(Model.Incomes?.Select(i => i.Amount).ToList() ?? new List<decimal>()));
+    var expenseDates = @Html.Raw(Json.Serialize(Model.Expenses?.Select(e => e.Date.ToString("yyyy-MM-dd")).ToList() ?? new List<string>()));
+    var expenseAmounts = @Html.Raw(Json.Serialize(Model.Expenses?.Select(e => e.Amount).ToList() ?? new List<decimal>()));
+
+    // Combine and deduplicate the dates
+    var allDates = incomeDates.concat(expenseDates);
+    var uniqueDates = [...new Set(allDates)].sort();
+
+    // Initialize the arrays with null values to ensure all dates are represented
+    var incomeData = uniqueDates.map(date => null);
+    var expenseData = uniqueDates.map(date => null);
+
+    // Add a starting point at zero
+    incomeData[0] = 0;
+    expenseData[0] = 0;
+
+    // Fill in the incomeData array
+    incomeDates.forEach((date, index) => {
+        var idx = uniqueDates.indexOf(date);
+        incomeData[idx] = (incomeData[idx] || 0) + incomeAmounts[index];
+    });
+
+    // Fill in the expenseData array
+    expenseDates.forEach((date, index) => {
+        var idx = uniqueDates.indexOf(date);
+        expenseData[idx] = (expenseData[idx] || 0) + expenseAmounts[index];
+    });
+
+    // Create the chart
+    var incomeExpenseChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: uniqueDates,
+            datasets: [
+                {
+                    label: 'Income',
+                    data: incomeData,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    fill: false,
+                    spanGaps: true, // Ensure lines are connected even if there are gaps
+                    tension: 0.4  // Smooth the line
+                },
+                {
+                    label: 'Expenses',
+                    data: expenseData,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    fill: false,
+                    spanGaps: true, // Ensure lines are connected even if there are gaps
+                    tension: 0.4  // Smooth the line
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: {
+                        maxRotation: 45, // Adjust to fit more labels
+                        minRotation: 45,
+                    },
+                    grid: {
+                        display: false, // Hide the grid to make the chart cleaner
+                    },
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) {
+                            return value.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+                        }
+                    }
+                }
+            },
+            elements: {
+                point: {
+                    radius: 3, // Smaller points to fit more on the graph
+                },
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                }
+            }
+        }
+    });
+</script>
